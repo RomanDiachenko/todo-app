@@ -1,0 +1,54 @@
+# Qualinaut: what to test in this project and what to produce.
+# Values can use environment variables: ${NAME} or ${NAME:-default}.
+version: 1  # the layout of this file; `qlt migrate` upgrades it
+name: "todo-app"
+
+# One React app, three builds: the web page, Capacitor (Android) and Electron (Windows).
+targets:
+  - id: web
+    platform: web
+    url: "http://localhost:5173/todo-app/"  # vite.config.ts: base "/todo-app/"
+    sandbox:  # start the app for each run, stop it afterwards
+      provider: process
+      command: "npm run dev"
+    build:
+      command: "npm ci"
+
+  - id: android  # the Capacitor build, on an emulator, driven through Appium
+    platform: android
+    app: android/app/build/outputs/apk/debug/app-debug.apk
+    # CI: as the repository's build-apk workflow, with Capacitor 7 (Java 21) and a debug APK
+    build:
+      command: "npm ci && npx vite build --base ./ && npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 && npx cap init TapDo com.tapiwa.todoapp --web-dir dist && npx cap add android && cd android && chmod +x gradlew && ./gradlew assembleDebug"
+    sandbox:
+      provider: android-emulator
+      avd: qlt-todo
+
+  - id: desktop  # the Electron build (Windows), driven through Appium
+    platform: desktop
+    app: "release/win-unpacked/Todo App.exe"
+    # CI: as the repository's build-desktop workflow, unpacked (--dir). electron-main.js
+    # uses require() while package.json says "type": "module", so the packaged copy is
+    # switched to CommonJS; the icon it names is not in the repository.
+    build:
+      command: "npm ci && npx vite build --base ./ && npm pkg set type=commonjs && npm install --no-save electron electron-builder && npx electron-builder --config electron-builder.json --win --dir -c.win.icon=public/icon-512.png"
+
+sources:
+  repos: ["."]  # source code: routes, guards, data access
+  docs: []  # specifications: md, txt, html, pdf, docx, OpenAPI
+  chats: []  # chat exports (Slack folders, JSON, text)
+
+oracle:
+  type: requirements  # requirements | recorded_snapshot | live_reference
+
+policy: intended  # intended | strict (pin observed behavior, bug for bug)
+
+pipeline:
+  goals: [test.results]  # test.results = explore, requirements, tests, run them
+  agents:  # which agents run; their options: qlt.settings.yaml
+    ui-explorer: {}
+    code-linker: {}
+    test-generator: {}
+  gates: []  # artifact kinds to approve before the pipeline continues
+
+flows: {}
